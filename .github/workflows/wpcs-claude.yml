@@ -1,0 +1,185 @@
+name: Claude PHP Code Review
+
+
+on:
+  pull_request:
+    branches:
+      - "**"
+    paths:
+      - "**.php"
+
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+
+jobs:
+  claude-review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+
+      - name: Analyze PHP files with Claude
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+        run: |
+          escape_json() {
+            local content="$1"
+            content="${content//\\/\\\\}"
+            content="${content//\"/\\\"}"
+            content="${content//[$'\t']/\\t}"
+            content="${content//$'\n'/\\n}"
+            content="${content//[$'\r']/\\r}"
+            echo "$content"
+          }
+
+
+          call_claude() {
+            local raw_content="$1"
+            local escaped_content=$(escape_json "$raw_content")
+           
+            local json_payload='{
+              "model": "claude-3-5-sonnet-20241022",
+              "max_tokens": 1024,
+              "messages": [{
+                "role": "user",
+                "content": "'"$escaped_content"'"
+              }]
+            }'
+           
+            local retries=2
+            local wait_time=2
+            local success=0
+            local response
+            local status_code
+
+
+            for (( i=0; i<retries; i++ )); do
+              echo "Sending request to Claude API... Attempt $((i+1))"
+             
+              response=$(curl -s -w "\n%{http_code}" \
+                https://api.anthropic.com/v1/messages \
+                -H "Content-Type: application/json" \
+                -H "x-api-key: $ANTHROPIC_API_KEY" \
+                -H "anthropic-version: 2023-06-01" \
+                -d "$json_payload" 2>&1)
+             
+              status_code=$(echo "$response" | tail -n1)
+              local body=$(echo "$response" | sed '$d')
+
+
+              echo "Response Status Code: $status_code"
+             
+              if [ "$status_code" = "200" ]; then
+                local review_content=$(echo "$body" | jq -r '.content[0].text // empty')
+                if [ ! -z "$review_content" ]; then
+                  echo "$review_content"
+                  success=1
+                  break
+                else
+                  echo "Error: Empty response content" >&2
+                  return 1
+                fi
+              elif [ "$status_code" = "429" ] || [ "$status_code" = "529" ]; then
+                if [ $i -lt $((retries-1)) ]; then
+                  echo "Rate limited. Retrying in $wait_time seconds..."
+                  sleep $wait_time
+                else
+                  echo "Rate limited. Skipping this file after $((i+1)) attempts."
+                fi
+              else
+                echo "Error: API call failed with status $status_code" >&2
+                echo "Response body: $body" >&2
+                return 1
+              fi
+            done
+
+
+            if [ "$success" -ne 1 ]; then
+              echo "Error: API call failed after $retries attempts" >&2
+              return 1
+            fi
+          }
+
+
+          CURRENT_SHA=$GITHUB_SHA
+          PREVIOUS_SHA=$(git rev-parse HEAD^)
+
+
+          CHANGED_FILES=$(git diff --name-only $PREVIOUS_SHA $CURRENT_SHA | grep '\.php$' || true)
+
+
+          if [ -z "$CHANGED_FILES" ]; then
+            echo "No PHP files changed in this commit."
+            exit 0
+          fi
+
+
+          # Define the global variable for the prompt
+          PROMPT_TEXT="consider yourself a WordPress plugin code reviewer. Please perform a detailed code review strictly according to WordPress coding standards, do not use modern PHP standards or any other standards. Identify all issues, including structure, formatting, security, and any other relevant guidelines, and list every instance without skipping. Each issue should include the line number for easy identification. If an issue type appears multiple times, provide a detailed description with line numbers for each occurrence. The review should capture all details to ensure thorough compliance with WordPress standards. list each and every issue, do not say multiple instances found."
+
+
+          for file in $CHANGED_FILES; do
+            if [ -f "$file" ]; then
+              echo "----------------------------------------"
+              echo "Processing PHP file: $file"
+              echo "----------------------------------------"
+             
+              FILE_DIFF=$(git diff $PREVIOUS_SHA $CURRENT_SHA -- "$file")
+              echo "Diff size: ${#FILE_DIFF} characters"
+             
+              CONTENT=$(cat "$file")
+              echo "File size: ${#CONTENT} characters"
+             
+              # Use the global variable PROMPT_TEXT in the prompt
+              PROMPT="$PROMPT_TEXT
+
+
+              Here is the complete current file:
+              $CONTENT"
+
+
+              echo "Prompt prepared. Length: ${#PROMPT} characters"
+             
+              CLAUDE_RESPONSE=$(call_claude "$PROMPT")
+              API_STATUS=$?
+             
+              if [ $API_STATUS -eq 0 ]; then
+                echo "Got response from Claude..."
+               
+                ESCAPED_REVIEW=$(escape_json "$CLAUDE_RESPONSE")
+               
+                echo "Creating GitHub issue..."
+                ISSUE_RESPONSE=$(curl -s -X POST \
+                  -H "Authorization: token $GITHUB_TOKEN" \
+                  -H "Accept: application/vnd.github.v3+json" \
+                  "https://api.github.com/repos/$GITHUB_REPOSITORY/issues" \
+                  -d '{
+                    "title": "Code Review: '"$file"'",
+                    "body": "Code review for commit '"$GITHUB_SHA"'\n\n'"$ESCAPED_REVIEW"'",
+                    "labels": ["code-review", "automated"]
+                  }')
+               
+                ISSUE_URL=$(echo "$ISSUE_RESPONSE" | jq -r '.html_url // empty')
+                if [ ! -z "$ISSUE_URL" ]; then
+                  echo "Successfully created issue: $ISSUE_URL"
+                else
+                  echo "Error creating issue. Response:"
+                  echo "$ISSUE_RESPONSE"
+                fi
+              else
+                echo "Error: Failed to get valid response from Claude"
+                echo "Full error response:"
+                echo "$CLAUDE_RESPONSE"
+              fi
+              echo "----------------------------------------"
+              echo "Completed processing $file"
+              echo "----------------------------------------"
+            fi
+          done
