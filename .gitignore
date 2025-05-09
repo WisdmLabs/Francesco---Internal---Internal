@@ -1,0 +1,10 @@
+*
+!sonar-project.properties
+!.gitignore
+!wp-content/
+!wp-content/plugins/
+!wp-content/plugins/wdm-customization/
+!wp-content/plugins/wdm-customization/*
+!wp-content/plugins/wdm-customization/**
+.vscode
+!.gitattributes
