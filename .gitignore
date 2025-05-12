@@ -8,3 +8,4 @@
 !wp-content/plugins/wdm-customization/**
 .vscode
 !.gitattributes
+CHANGELOG.md
