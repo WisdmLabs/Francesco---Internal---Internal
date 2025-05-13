@@ -24,6 +24,14 @@
  * @package wdm-customization
  */
 
+// Define plugin constants.
+if ( ! defined( 'WDM_CUSTOMIZATION_PATH' ) ) {
+	define( 'WDM_CUSTOMIZATION_PATH', plugin_dir_path( __FILE__ ) );
+}
+
+
 require_once __DIR__ . '/includes/class-wdm-bookings.php';
+require_once __DIR__ . '/includes/class-wdm-bookings-reminder-emails.php';
 
 WDM_Bookings::get_instance();
+WDM_Bookings_Reminder_Emails::get_instance();
