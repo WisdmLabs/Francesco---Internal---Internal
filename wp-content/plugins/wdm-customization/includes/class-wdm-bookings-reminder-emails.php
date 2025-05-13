@@ -49,6 +49,9 @@ class WDM_Bookings_Reminder_Emails {
 
 		// Hook the event to our reminder function.
 		add_action( 'wdm_daily_booking_payment_reminder', array( $this, 'process_pending_payment_reminders' ) );
+
+		// Mark confirmation email sent time to prevent sending reminders too soon.
+		add_action( 'yith_wcbk_booking_status_confirmed_notification', array( $this, 'wdm_booking_store_confirmation_time_meta' ) );
 	}
 
 	/**
@@ -314,5 +317,17 @@ class WDM_Bookings_Reminder_Emails {
 			// Free memory.
 			unset( $booking );
 		}
+	}
+
+	/**
+	 * Store the time when a booking confirmation notification is sent.
+	 * This helps prevent sending payment reminders too soon after confirmation.
+	 *
+	 * @param int $booking_id The booking ID.
+	 * @return void
+	 */
+	public function wdm_booking_store_confirmation_time_meta( $booking_id ) {
+		// Record the time when a confirmation email was sent.
+		update_post_meta( $booking_id, '_wdm_payment_reminder_sent', time() );
 	}
 }
