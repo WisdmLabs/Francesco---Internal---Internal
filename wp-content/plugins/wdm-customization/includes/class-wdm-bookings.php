@@ -148,7 +148,7 @@ class WDM_Bookings {
 
 			if ( ! empty( $raw_args ) && is_array( $raw_args ) && class_exists( 'THEMECOMPLETE_EPO_Cart' ) && method_exists( THEMECOMPLETE_EPO_Cart::instance(), 'add_cart_item_data_helper' ) ) {
 				$tm_epo_processed_data = THEMECOMPLETE_EPO_Cart::instance()->add_cart_item_data_helper( array(), $product_id_from_wc, $raw_args );
-				return $tm_epo_processed_data;
+				return array_merge( $cart_item_data, $tm_epo_processed_data );
 			}
 		}
 		return $cart_item_data;
