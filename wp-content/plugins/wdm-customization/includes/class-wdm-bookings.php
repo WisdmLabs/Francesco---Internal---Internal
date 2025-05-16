@@ -206,6 +206,7 @@ class WDM_Bookings {
 		// Check if $display_details is an array and represents the new list format (or an empty list).
 		if ( is_array( $display_details ) && ( empty( $display_details ) || ( is_array( reset( $display_details ) ) && isset( reset( $display_details )['label'] ) && isset( reset( $display_details )['value'] ) ) ) ) {
 			if ( ! empty( $display_details ) ) {
+				echo '<hr style="margin-top: 30px; border-top: 1px solid #eee;">';
 				echo '<h2>' . esc_html__( 'Additional Details', 'wdm-customization' ) . '</h2>';
 				echo '<table class="shop_table booking_details">';
 				echo '<tbody>';
@@ -245,7 +246,9 @@ class WDM_Bookings {
 					// Inner check for robustness, though outer condition implies structure.
 					if ( isset( $item['label'] ) && isset( $item['value'] ) ) {
 						echo '<div class="form-field form-field-wide">';
-						echo '<label style="font-weight: normal;">' . esc_html( $item['label'] ) . ':</label> ';
+						if ( ! empty( $item['label'] ) ) {
+							echo '<label style="font-weight: normal;">' . esc_html( $item['label'] ) . ':</label> ';
+						}
 						echo '<span class="booking-data__value">' . wp_kses_post( $item['value'] ) . '</span>';
 						echo '</div>';
 					}
