@@ -87,49 +87,90 @@ class WDM_Bookings {
 		$booking_id = $booking->get_id();
 		$product_id = $booking->get_product_id();
 		$product    = $booking->get_product();
+		$order_id   = $booking->get_order_id();
 
 		if ( ! $product || ! $product_id ) {
 			return;
 		}
 
-		// Save the raw request args.
-		$args = $_REQUEST; // phpcs:ignore
-		update_post_meta( $booking_id, '_wdm_booking_raw_args', is_array( $args ) ? $args : array() );
+		// Process differently based on whether this booking has an associated order.
+		if ( $order_id ) {
+			// This booking was created during checkout (no confirmation required).
+			$order = wc_get_order( $order_id );
+			if ( $order ) {
+				foreach ( $order->get_items() as $item_id => $item ) {
+					// Find the item that corresponds to this booking.
+					if ( $item->get_product_id() === $product_id ) {
+						// First try to get TM EPO data from the order item.
+						$tm_data = $item->get_meta( '_tmcartepo_data' );
 
-		// Store Extra options in meta to display on the booking page.
-		if ( ! empty( $args ) && is_array( $args ) && class_exists( 'THEMECOMPLETE_EPO_Cart' ) && method_exists( THEMECOMPLETE_EPO_Cart::instance(), 'add_cart_item_data_helper' ) ) {
-			// We are using the add_cart_item_data_helper method because Labels are not provided in the args and we need to get them from the EPO.
-			// In processed_epo_data_for_cart, we get the labels in the 'name' key.
-			$processed_epo_data_for_cart = THEMECOMPLETE_EPO_Cart::instance()->add_cart_item_data_helper( array(), $product_id, $args );
+						if ( ! empty( $tm_data ) && is_array( $tm_data ) ) {
+							$booking_display_details = $this->process_tm_epo_data_for_display( $tm_data );
 
-			if ( isset( $processed_epo_data_for_cart['tmcartepo'] ) && is_array( $processed_epo_data_for_cart['tmcartepo'] ) ) {
-				$tmcartepo_data                   = $processed_epo_data_for_cart['tmcartepo'];
-				$booking_display_details_for_meta = array();
-
-				if ( ! empty( $tmcartepo_data ) ) {
-					foreach ( $tmcartepo_data as $epo_item ) {
-						if ( isset( $epo_item['name'] ) && isset( $epo_item['value'] ) ) {
-							// Skip items where the value might be empty or not suitable for display, or if it's a hidden field.
-							if ( empty( $epo_item['value'] ) && '0' !== (string) $epo_item['value'] ) {
-								continue;
+							if ( ! empty( $booking_display_details ) ) {
+								update_post_meta( $booking_id, '_wdm_booking_display_details', $booking_display_details );
 							}
-
-							$display_key        = esc_html( (string) $epo_item['name'] );
-							$temp_display_value = is_array( $epo_item['value'] ) ? implode( ', ', array_map( 'esc_html', $epo_item['value'] ) ) : esc_html( (string) $epo_item['value'] );
-
-							$booking_display_details_for_meta[] = array(
-								'label' => $display_key,
-								'value' => $temp_display_value,
-							);
 						}
+						break;
 					}
 				}
+			}
+		} else {
+			// This is a booking with confirmation flow - use existing code.
+			// Save the raw request args.
+			$args = $_REQUEST; // phpcs:ignore
+			update_post_meta( $booking_id, '_wdm_booking_raw_args', is_array( $args ) ? $args : array() );
 
-				if ( ! empty( $booking_display_details_for_meta ) ) {
-					update_post_meta( $booking_id, '_wdm_booking_display_details', $booking_display_details_for_meta );
+			// Store Extra options in meta to display on the booking page.
+			if ( ! empty( $args ) && is_array( $args ) && class_exists( 'THEMECOMPLETE_EPO_Cart' ) && method_exists( THEMECOMPLETE_EPO_Cart::instance(), 'add_cart_item_data_helper' ) ) {
+				// We are using the add_cart_item_data_helper method because Labels are not provided in the args and we need to get them from the EPO.
+				// In processed_epo_data_for_cart, we get the labels in the 'name' key.
+				$processed_epo_data_for_cart = THEMECOMPLETE_EPO_Cart::instance()->add_cart_item_data_helper( array(), $product_id, $args );
+
+				if ( isset( $processed_epo_data_for_cart['tmcartepo'] ) && is_array( $processed_epo_data_for_cart['tmcartepo'] ) ) {
+					$tmcartepo_data = $processed_epo_data_for_cart['tmcartepo'];
+
+					$booking_display_details = $this->process_tm_epo_data_for_display( $tmcartepo_data );
+
+					if ( ! empty( $booking_display_details ) ) {
+						update_post_meta( $booking_id, '_wdm_booking_display_details', $booking_display_details );
+					}
 				}
 			}
 		}
+	}
+
+	/**
+	 * Process TM EPO data for display.
+	 *
+	 * @param array $tm_data The TM EPO data to process.
+	 * @return array Processed display details for meta.
+	 */
+	private function process_tm_epo_data_for_display( $tm_data ) {
+		$booking_display_details_for_meta = array();
+
+		if ( ! empty( $tm_data ) ) {
+			foreach ( $tm_data as $epo_item ) {
+				if ( isset( $epo_item['name'] ) && isset( $epo_item['value'] ) ) {
+					// Skip items where the value might be empty or not suitable for display.
+					if ( empty( $epo_item['value'] ) && '0' !== (string) $epo_item['value'] ) {
+						continue;
+					}
+
+					$display_key        = esc_html( (string) $epo_item['name'] );
+					$temp_display_value = is_array( $epo_item['value'] ) ?
+						implode( ', ', array_map( 'esc_html', $epo_item['value'] ) ) :
+						esc_html( (string) $epo_item['value'] );
+
+					$booking_display_details_for_meta[] = array(
+						'label' => $display_key,
+						'value' => $temp_display_value,
+					);
+				}
+			}
+		}
+
+		return $booking_display_details_for_meta;
 	}
 
 	/**
