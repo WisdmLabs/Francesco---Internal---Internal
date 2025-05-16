@@ -14,9 +14,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 $settings = get_option( 'wdm_booking_reminder_settings', array() );
 
 // Set default values.
-$email_subject     = isset( $settings['email_subject'] ) ? $settings['email_subject'] : __( 'Payment Reminder: Your booking for {product_name}', 'wdm-customization' );
+$email_subject     = isset( $settings['email_subject'] ) ? $settings['email_subject'] : __( 'Payment Reminder for Order #{booking_id}: Your booking for {product_name}', 'wdm-customization' );
 $email_body        = isset( $settings['email_body'] ) ? $settings['email_body'] : __(
-	"Hello {customer_name},\n\nThis is a reminder that your booking #{booking_id} for {product_name} on {booking_date} is confirmed but still requires payment.\n\nTo complete your booking, please proceed with payment through the link below:\n\n{payment_link}\n\n{additional_details}\n\nIf you have any questions, please contact us.",
+	"Hello {customer_name},\n\nThis is a reminder that your booking #{booking_id} for {product_name} on {start_date} to {end_date} is confirmed but still requires payment.\n\nTo complete your booking, please proceed with payment through the link below:\n\n{payment_link}\n\nIf you have any questions, please contact us.",
 	'wdm-customization'
 );
 $reminder_interval = isset( $settings['reminder_interval'] ) ? $settings['reminder_interval'] : 3;
